@@ -1,0 +1,61 @@
+"""{{ function_name }} - Auto-generated API
+Author: {{ author }}
+Date: {{ datetime }}
+"""
+from fastapi import APIRouter, Depends, Path, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_user
+from app.core.response import AjaxResult, TableDataInfo
+from app.db.session import get_db
+
+router = APIRouter()
+
+
+@router.get("/list")
+async def list_{{ business_name }}(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    pageNum: int = Query(1, ge=1),
+    pageSize: int = Query(10, ge=1, le=100),
+):
+    # TODO: Implement list query
+    return TableDataInfo(total=0, rows=[]).model_dump()
+
+
+@router.get("/{id}")
+async def get_{{ business_name }}(
+    id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # TODO: Implement get by id
+    return AjaxResult.success()
+
+
+@router.post("")
+async def add_{{ business_name }}(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # TODO: Implement create
+    return AjaxResult.success()
+
+
+@router.put("")
+async def update_{{ business_name }}(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # TODO: Implement update
+    return AjaxResult.success()
+
+
+@router.delete("/{ids}")
+async def delete_{{ business_name }}(
+    ids: str = Path(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # TODO: Implement delete
+    return AjaxResult.success()

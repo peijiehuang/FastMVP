@@ -1,0 +1,14 @@
+"""{{ function_name }} - Auto-generated CRUD
+Author: {{ author }}
+Date: {{ datetime }}
+"""
+from app.crud.base import CRUDBase
+from app.models.{{ module_name }} import {{ class_name }}
+from app.schemas.{{ module_name }} import {{ class_name }}Create, {{ class_name }}Update
+
+
+class CRUD{{ class_name }}(CRUDBase[{{ class_name }}, {{ class_name }}Create, {{ class_name }}Update]):
+    pass
+
+
+crud_{{ business_name }} = CRUD{{ class_name }}({{ class_name }})

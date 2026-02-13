@@ -1,0 +1,24 @@
+"""{{ function_name }} - Auto-generated schemas
+Author: {{ author }}
+Date: {{ datetime }}
+"""
+from pydantic import BaseModel
+
+
+class {{ class_name }}Create(BaseModel):
+{% for col in columns %}
+{% if col.is_insert == '1' and col.is_pk != '1' %}
+    {{ col.python_field }}: {{ col.python_type }} | None = None
+{% endif %}
+{% endfor %}
+
+
+class {{ class_name }}Update(BaseModel):
+{% if pk_column %}
+    {{ pk_column.python_field }}: int
+{% endif %}
+{% for col in columns %}
+{% if col.is_edit == '1' and col.is_pk != '1' %}
+    {{ col.python_field }}: {{ col.python_type }} | None = None
+{% endif %}
+{% endfor %}

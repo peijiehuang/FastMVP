@@ -1,0 +1,19 @@
+"""{{ function_name }} - Auto-generated model
+Author: {{ author }}
+Date: {{ datetime }}
+"""
+from sqlalchemy import BigInteger, String, Integer, DateTime
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, AuditMixin
+
+
+class {{ class_name }}(Base, AuditMixin):
+    __tablename__ = "{{ table_name }}"
+{% for col in columns %}
+{% if col.is_pk == '1' %}
+    {{ col.python_field }}: Mapped[{{ col.python_type }}] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+{% else %}
+    {{ col.python_field }}: Mapped[{{ col.python_type }} | None] = mapped_column(String(255), nullable=True)
+{% endif %}
+{% endfor %}
