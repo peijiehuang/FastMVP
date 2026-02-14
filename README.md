@@ -102,14 +102,19 @@ cp .env.example .env
 # 数据库连接 (修改用户名、密码、数据库名)
 DATABASE_URL=mysql+aiomysql://root:your_password@localhost:3306/ruoyi_fast
 
-# Redis 连接
+# Redis 连接 (无密码)
 REDIS_URL=redis://localhost:6379/0
+# Redis 连接 (有密码，注意密码前的冒号，用户名留空)
+# REDIS_URL=redis://:your_redis_password@localhost:6379/0
 
 # JWT 密钥 (生产环境务必修改为随机字符串)
 JWT_SECRET=your-secret-key-change-in-production
 
 # Token 过期时间 (分钟)
 TOKEN_EXPIRE_MINUTES=30
+
+# 验证码开关 (设为 false 可关闭登录验证码)
+CAPTCHA_ENABLED=true
 ```
 
 ### 5. 启动服务
