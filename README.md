@@ -1,8 +1,8 @@
 # RuoYi-FastAPI
 
-基于 Python FastAPI 框架重新实现的 [若依(RuoYi-Vue)](https://gitee.com/y_project/RuoYi-Vue) 后台管理系统后端。除代码生成模块外，与若依官方 Vue2 前端完全兼容，无需修改前端代码即可对接使用。
+基于 Python FastAPI 框架重新实现的 [若依(RuoYi-Vue)](https://gitee.com/y_project/RuoYi-Vue) 后台管理系统后端。搭配适配版前端 [FastMVPVueUI](https://github.com/peijiehuang/FastMVPVueUI) 可开箱即用，无需修改前端代码。
 
-> **前端适配说明：** 代码生成模块需要对前端做少量修改，因为本项目生成 Python 代码而非原版的 Java 代码。具体改动见下方 [前端修改说明](#前端修改说明) 章节。
+> **前端说明：** 本项目配套的前端 [FastMVPVueUI](https://github.com/peijiehuang/FastMVPVueUI) 基于若依官方 Vue2 前端修改，已适配代码生成模块（Python 语法高亮、预览标签等），可直接使用。如使用若依官方原版前端，需自行做少量修改，详见 [前端修改说明](#前端修改说明)。
 
 ## 技术栈
 
@@ -54,8 +54,12 @@
 ### 1. 克隆项目
 
 ```bash
-git clone <仓库地址>
+# 后端
+git clone https://github.com/peijiehuang/FastMVP.git
 cd FastMVP
+
+# 前端（另开目录）
+git clone https://github.com/peijiehuang/FastMVPVueUI.git
 ```
 
 ### 2. 创建虚拟环境并安装依赖
@@ -111,27 +115,37 @@ TOKEN_EXPIRE_MINUTES=30
 ### 5. 启动服务
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8090 --reload
 ```
 
 启动成功后可访问：
 
 | 地址 | 说明 |
 |------|------|
-| http://localhost:8080/docs | Swagger UI 交互式 API 文档 |
-| http://localhost:8080/redoc | ReDoc 风格 API 文档 |
-| http://localhost:8080/health | 健康检查接口 |
+| http://localhost:8090/docs | Swagger UI 交互式 API 文档 |
+| http://localhost:8090/redoc | ReDoc 风格 API 文档 |
+| http://localhost:8090/health | 健康检查接口 |
 
 ### 6. 前端对接
 
-使用若依官方 Vue2 前端 [RuoYi-Vue](https://gitee.com/y_project/RuoYi-Vue)，将前端 `vue.config.js` 中的代理地址指向本项目：
+使用适配版前端 [FastMVPVueUI](https://github.com/peijiehuang/FastMVPVueUI)：
+
+```bash
+cd FastMVPVueUI
+npm install
+npm run dev
+```
+
+前端默认代理已指向 `http://localhost:8090`，启动后端后直接访问前端即可。
+
+如需修改代理地址，编辑 `vue.config.js`：
 
 ```javascript
 // vue.config.js
 devServer: {
   proxy: {
     '/dev-api': {
-      target: 'http://localhost:8080',
+      target: 'http://localhost:8090',
       changeOrigin: true,
       pathRewrite: { '^/dev-api': '' }
     }
@@ -809,7 +823,9 @@ FastMVP/
 
 ## 前端修改说明
 
-由于本项目生成 Python 代码而非 Java 代码，需要对若依官方前端 `ruoyi-ui` 做以下少量修改：
+> **推荐直接使用适配版前端 [FastMVPVueUI](https://github.com/peijiehuang/FastMVPVueUI)，以下修改已内置，无需手动操作。**
+
+如果使用若依官方原版前端 `ruoyi-ui`，需要对代码生成预览页面做以下修改：
 
 **文件：** `src/views/tool/gen/index.vue`
 
