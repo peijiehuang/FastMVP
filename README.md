@@ -331,9 +331,12 @@ sample_task.with_multi_params('ry', true, 2000)
 
 ---
 
-## 开发指南：如何添加新功能
+## 开发指南
 
-本项目采用分层架构，添加新功能只需按照固定模式创建 5 个文件并注册路由。以下以添加一个"产品管理"模块为完整示例。
+本项目采用分层架构，添加新功能有两种方式：
+
+1. **代码生成器（推荐）** -- 通过前端页面导入数据库表，一键生成 Model / Schema / CRUD / API 骨架代码，再手动完善业务逻辑
+2. **手动编写** -- 按照固定模式逐层创建文件，适合需要高度定制的场景
 
 ### 架构分层
 
@@ -353,174 +356,143 @@ sample_task.with_multi_params('ry', true, 2000)
 | API | `app/api/` | FastAPI 路由端点，权限校验，响应格式化 |
 | Service | `app/services/` | 复杂业务逻辑（可选，简单 CRUD 不需要） |
 
-### 第一步：建表
+### 方式一：使用代码生成器（推荐）
+
+代码生成器可以从已有数据库表自动生成 Model、Schema、CRUD、API 四层代码，省去手写样板代码的工作。
+
+#### 第一步：建表
+
+在 MySQL 中创建业务表，遵循若依命名约定：
 
 ```sql
 CREATE TABLE biz_product (
-  product_id   BIGINT       NOT NULL AUTO_INCREMENT,
+  product_id   BIGINT       NOT NULL AUTO_INCREMENT COMMENT '产品ID',
   product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
   product_code VARCHAR(50)  NOT NULL COMMENT '产品编码',
   price        DECIMAL(10,2) DEFAULT 0 COMMENT '价格',
   status       CHAR(1)      DEFAULT '0' COMMENT '状态（0正常 1停用）',
-  create_by    VARCHAR(64)  DEFAULT '',
-  create_time  DATETIME     DEFAULT CURRENT_TIMESTAMP,
-  update_by    VARCHAR(64)  DEFAULT '',
-  update_time  DATETIME     DEFAULT NULL,
-  remark       VARCHAR(500) DEFAULT NULL,
+  create_by    VARCHAR(64)  DEFAULT '' COMMENT '创建者',
+  create_time  DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by    VARCHAR(64)  DEFAULT '' COMMENT '更新者',
+  update_time  DATETIME     DEFAULT NULL COMMENT '更新时间',
+  remark       VARCHAR(500) DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (product_id)
 ) ENGINE=InnoDB COMMENT='产品表';
 ```
 
-### 第二步：创建 Model
+#### 第二步：导入表并生成代码
 
-文件：`app/models/biz_product.py`
+1. 打开前端页面：系统工具 → 代码生成
+2. 点击 **导入** 按钮，在弹窗中勾选 `biz_product` 表，点击确定
+3. 点击 **编辑** 按钮，可修改生成信息：
+   - 基本信息：模块名（`biz`）、业务名（`product`）、功能名（`产品管理`）、作者
+   - 字段信息：调整每个字段的显示类型（输入框/下拉框/日期等）、是否必填、查询方式（精确/模糊）
+4. 点击 **预览** 可查看将要生成的 4 个文件
+5. 勾选表后点击 **生成** 按钮，下载 ZIP 包
 
-```python
-from decimal import Decimal
-from sqlalchemy import BigInteger, String, Numeric
-from sqlalchemy.orm import Mapped, mapped_column
+#### 第三步：放置生成的文件
 
-from app.models.base import Base, AuditMixin
+解压 ZIP 包，将 4 个文件放到对应目录：
 
-
-class BizProduct(Base, AuditMixin):
-    """产品表。继承 AuditMixin 自动获得 create_by/create_time/update_by/update_time/remark 字段。"""
-    __tablename__ = "biz_product"
-
-    product_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    product_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    product_code: Mapped[str] = mapped_column(String(50), nullable=False)
-    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
-    status: Mapped[str] = mapped_column(String(1), default="0")
+```
+biz_product/
+├── model.py   → 复制到 app/models/biz_product.py
+├── schema.py  → 复制到 app/schemas/biz_product.py
+├── crud.py    → 复制到 app/crud/crud_product.py
+└── api.py     → 复制到 app/api/biz/product.py
 ```
 
-关键点：
-- 继承 `Base` 和 `AuditMixin`，自动获得审计字段（create_by、create_time、update_by、update_time、remark）
-- 主键使用 `BigInteger` + `autoincrement=True`
-- 状态字段用 `String(1)`，`"0"` 表示正常，`"1"` 表示停用（若依约定）
+#### 第四步：完善生成的代码
 
-### 第三步：创建 Schema
+生成的代码是骨架，API 层的端点标记了 `# TODO`，需要补充实际业务逻辑。以下是需要完善的要点：
 
-文件：`app/schemas/biz_product.py`
+**model.py** -- 调整列类型
+
+生成器默认所有非主键字段为 `String(255)`，需要根据实际表结构修改：
 
 ```python
-from decimal import Decimal
+# 生成的代码（所有字段都是 String）
+product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+price: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+# 修改后（匹配实际数据库类型）
+product_name: Mapped[str] = mapped_column(String(100), nullable=False)
+price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+```
+
+**schema.py** -- 改用 CamelModel
+
+生成的 Schema 继承 `BaseModel`，需改为 `CamelModel` 以支持前端 camelCase 字段名：
+
+```python
+# 生成的代码
+from pydantic import BaseModel
+class BizProductCreate(BaseModel): ...
+
+# 修改后
 from app.schemas import CamelModel
-
-
-class ProductCreate(CamelModel):
-    """新增产品请求体。"""
-    product_name: str
-    product_code: str
-    price: Decimal = Decimal("0")
-    status: str = "0"
-    remark: str | None = None
-
-
-class ProductUpdate(CamelModel):
-    """修改产品请求体。Update 的 ID 字段必填，其余可选。"""
-    product_id: int
-    product_name: str | None = None
-    product_code: str | None = None
-    price: Decimal | None = None
-    status: str | None = None
-    remark: str | None = None
+class BizProductCreate(CamelModel): ...
 ```
 
-关键点：
-- 继承 `CamelModel`，自动支持 camelCase 别名（前端发 `productName`，后端收 `product_name`）
-- Create 中必填字段不给默认值，选填字段给默认值
-- Update 中除 ID 外所有字段都是 `Optional`，只更新传入的字段
+**crud.py** -- 添加列表查询方法
 
-### 第四步：创建 CRUD
-
-文件：`app/crud/crud_product.py`
+生成的 CRUD 类是空的，继承了 `CRUDBase` 的通用方法。需要添加带过滤条件的分页查询：
 
 ```python
-from datetime import datetime
-from typing import Sequence
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.crud.base import CRUDBase
-from app.models.biz_product import BizProduct
-from app.schemas.biz_product import ProductCreate, ProductUpdate
-
-
-class CRUDProduct(CRUDBase[BizProduct, ProductCreate, ProductUpdate]):
-    """产品 CRUD。继承 CRUDBase 自动获得 get / get_list / create / update / delete_by_ids 方法。"""
-
+class CRUDBizProduct(CRUDBase[BizProduct, BizProductCreate, BizProductUpdate]):
     async def get_product_list(
-        self,
-        db: AsyncSession,
-        *,
-        page_num: int = 1,
-        page_size: int = 10,
-        product_name: str | None = None,
-        product_code: str | None = None,
-        status: str | None = None,
+        self, db: AsyncSession, *, page_num=1, page_size=10,
+        product_name: str | None = None, status: str | None = None,
     ) -> tuple[Sequence[BizProduct], int]:
         query = select(BizProduct)
         if product_name:
             query = query.where(BizProduct.product_name.like(f"%{product_name}%"))
-        if product_code:
-            query = query.where(BizProduct.product_code.like(f"%{product_code}%"))
         if status:
             query = query.where(BizProduct.status == status)
         query = query.order_by(BizProduct.product_id.desc())
         return await self.get_list(db, query=query, page_num=page_num, page_size=page_size)
-
-    async def create_product(self, db: AsyncSession, obj_in: ProductCreate, create_by: str) -> BizProduct:
-        product = BizProduct(**obj_in.model_dump(), create_by=create_by)
-        db.add(product)
-        await db.flush()
-        await db.refresh(product)
-        return product
-
-    async def update_product(self, db: AsyncSession, obj_in: ProductUpdate, update_by: str) -> BizProduct | None:
-        product = await self.get(db, obj_in.product_id)
-        if not product:
-            return None
-        update_data = obj_in.model_dump(exclude_unset=True, exclude={"product_id"})
-        update_data["update_by"] = update_by
-        update_data["update_time"] = datetime.now()
-        for k, v in update_data.items():
-            setattr(product, k, v)
-        await db.flush()
-        return product
-
-
-crud_product = CRUDProduct(BizProduct)
 ```
 
-关键点：
-- 继承 `CRUDBase[Model, CreateSchema, UpdateSchema]`，自动获得 `get`、`get_list`、`delete_by_ids` 等通用方法
-- 列表查询方法构建 `select` 查询，添加过滤条件，调用 `self.get_list()` 自动分页
-- 创建时传入 `create_by`，更新时设置 `update_by` 和 `update_time`
-- 模块末尾实例化 `crud_product` 供 API 层导入
+**api.py** -- 填充 TODO 端点
 
-### 第五步：创建 API 路由
-
-文件：`app/api/biz/product.py`
+生成的 API 端点都是 `# TODO` 占位，需要接入 CRUD 层并添加权限校验、操作日志、响应格式化：
 
 ```python
-from fastapi import APIRouter, Depends, Path, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.core.deps import has_permi          # 替换 get_current_user
+from app.core.decorators import log_operation # 操作日志
 from app.core.constants import BusinessType
-from app.core.decorators import log_operation
-from app.core.deps import has_permi
-from app.core.response import AjaxResult, TableDataInfo
-from app.crud.crud_product import crud_product
-from app.db.session import get_db
-from app.schemas.biz_product import ProductCreate, ProductUpdate
 
-router = APIRouter()
+@router.get("/list")
+async def list_product(
+    current_user: dict = Depends(has_permi("biz:product:list")),  # 权限校验
+    db: AsyncSession = Depends(get_db),
+    pageNum: int = Query(1, ge=1),
+    pageSize: int = Query(10, ge=1, le=100),
+    productName: str | None = Query(None),
+):
+    items, total = await crud_product.get_product_list(
+        db, page_num=pageNum, page_size=pageSize, product_name=productName,
+    )
+    return TableDataInfo(total=total, rows=[_to_dict(p) for p in items]).model_dump()
 
+@router.post("")
+@log_operation("产品管理", BusinessType.INSERT)  # 记录操作日志
+async def add_product(
+    body: BizProductCreate,
+    request: Request,
+    current_user: dict = Depends(has_permi("biz:product:add")),
+    db: AsyncSession = Depends(get_db),
+):
+    product = BizProduct(**body.model_dump(), create_by=current_user["user_name"])
+    db.add(product)
+    await db.flush()
+    return AjaxResult.success()
+```
 
+别忘了添加 `_to_dict()` 函数将模型转为 camelCase 字典：
+
+```python
 def _to_dict(p) -> dict:
-    """模型转字典。字段名必须是 camelCase，与前端对应。"""
     return {
         "productId": p.product_id,
         "productName": p.product_name,
@@ -531,109 +503,134 @@ def _to_dict(p) -> dict:
         "createTime": p.create_time.strftime("%Y-%m-%d %H:%M:%S") if p.create_time else None,
         "remark": p.remark,
     }
-
-
-@router.get("/list")
-async def list_products(
-    current_user: dict = Depends(has_permi("biz:product:list")),
-    db: AsyncSession = Depends(get_db),
-    pageNum: int = Query(1, ge=1),
-    pageSize: int = Query(10, ge=1, le=100),
-    productName: str | None = Query(None),
-    productCode: str | None = Query(None),
-    status: str | None = Query(None),
-):
-    """分页列表。返回 TableDataInfo 格式。"""
-    items, total = await crud_product.get_product_list(
-        db, page_num=pageNum, page_size=pageSize,
-        product_name=productName, product_code=productCode, status=status,
-    )
-    return TableDataInfo(total=total, rows=[_to_dict(p) for p in items]).model_dump()
-
-
-@router.get("/{product_id}")
-async def get_product(
-    product_id: int,
-    current_user: dict = Depends(has_permi("biz:product:query")),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取详情。返回 AjaxResult.success(data=...)。"""
-    product = await crud_product.get(db, product_id)
-    if not product:
-        return AjaxResult.error(msg="产品不存在")
-    return AjaxResult.success(data=_to_dict(product))
-
-
-@router.post("")
-@log_operation("产品管理", BusinessType.INSERT)
-async def add_product(
-    body: ProductCreate,
-    request: Request,
-    current_user: dict = Depends(has_permi("biz:product:add")),
-    db: AsyncSession = Depends(get_db),
-):
-    """新增。加 @log_operation 装饰器自动记录操作日志。"""
-    await crud_product.create_product(db, body, current_user["user_name"])
-    return AjaxResult.success()
-
-
-@router.put("")
-@log_operation("产品管理", BusinessType.UPDATE)
-async def update_product(
-    body: ProductUpdate,
-    request: Request,
-    current_user: dict = Depends(has_permi("biz:product:edit")),
-    db: AsyncSession = Depends(get_db),
-):
-    await crud_product.update_product(db, body, current_user["user_name"])
-    return AjaxResult.success()
-
-
-@router.delete("/{product_ids}")
-@log_operation("产品管理", BusinessType.DELETE)
-async def delete_products(
-    request: Request,
-    product_ids: str = Path(...),
-    current_user: dict = Depends(has_permi("biz:product:remove")),
-    db: AsyncSession = Depends(get_db),
-):
-    """批量删除。前端传逗号分隔的 ID 字符串。"""
-    ids = [int(i) for i in product_ids.split(",") if i.strip()]
-    await crud_product.delete_by_ids(db, ids)
-    return AjaxResult.success()
 ```
 
-关键点：
-- `has_permi("biz:product:list")` 权限校验，对应菜单管理中配置的权限字符
-- 列表接口返回 `TableDataInfo` 格式：`{code, msg, total, rows}`
-- 详情/新增/修改/删除返回 `AjaxResult` 格式：`{code, msg, data}`
-- `@log_operation` 装饰器自动记录操作日志，需要 `request` 和 `current_user` 参数
-- 删除接口接收逗号分隔的 ID 字符串（若依前端约定）
-- `_to_dict` 转换函数中字段名必须是 camelCase
+#### 第五步：注册路由
 
-### 第六步：注册路由
-
-文件：`app/api/router.py`
+在 `app/api/router.py` 中添加：
 
 ```python
 from app.api.biz import product
-
-# 在 api_router 中添加
 api_router.include_router(product.router, prefix="/biz/product", tags=["产品管理"])
 ```
 
-### 第七步：配置菜单权限
+#### 第六步：配置菜单权限
 
-在菜单管理中添加：
+在前端 系统管理 → 菜单管理 中添加：
 
-1. 新增目录：名称"业务管理"，路由地址 `biz`
-2. 新增菜单：名称"产品管理"，上级选"业务管理"，路由地址 `product`，组件路径 `biz/product/index`，权限字符 `biz:product:list`
-3. 新增按钮权限：
-   - 产品查询：`biz:product:query`
-   - 产品新增：`biz:product:add`
-   - 产品修改：`biz:product:edit`
-   - 产品删除：`biz:product:remove`
-   - 产品导出：`biz:product:export`
+1. 新增目录：名称 `业务管理`，路由地址 `biz`
+2. 新增菜单：名称 `产品管理`，上级选 `业务管理`，路由 `product`，组件 `biz/product/index`，权限 `biz:product:list`
+3. 新增按钮权限：`biz:product:query` / `biz:product:add` / `biz:product:edit` / `biz:product:remove` / `biz:product:export`
+
+#### 生成代码 vs 手动编写对照
+
+| 内容 | 生成器自动完成 | 需要手动完善 |
+|------|---------------|-------------|
+| Model 基本结构 | ✅ 类名、表名、字段 | 列类型精确映射（默认全是 String） |
+| Schema | ✅ Create/Update 字段 | 改继承 CamelModel、调整必填/类型 |
+| CRUD | ✅ 继承 CRUDBase | 添加带过滤条件的列表查询方法 |
+| API 路由 | ✅ 5 个端点骨架 | 填充业务逻辑、权限校验、操作日志 |
+| 路由注册 | ❌ | 手动在 router.py 中注册 |
+| 菜单权限 | ❌ | 手动在前端菜单管理中配置 |
+
+### 方式二：手动编写（完整控制）
+
+如果需要更精细的控制，可以跳过代码生成器，手动创建每一层文件。完整示例参考方式一中各层的"修改后"代码，按以下顺序创建：
+
+1. **建表** -- 在 MySQL 中创建业务表
+2. **Model** -- `app/models/biz_product.py`，继承 `Base` + `AuditMixin`
+3. **Schema** -- `app/schemas/biz_product.py`，继承 `CamelModel`，定义 Create/Update
+4. **CRUD** -- `app/crud/crud_product.py`，继承 `CRUDBase`，添加列表查询方法
+5. **API** -- `app/api/biz/product.py`，定义路由端点，添加权限校验和操作日志
+6. **注册路由** -- 在 `app/api/router.py` 中 `include_router`
+7. **配置菜单** -- 在前端菜单管理中添加目录、菜单、按钮权限
+
+### 添加后台服务（定时任务）
+
+系统使用 APScheduler 3.x 实现定时任务调度，支持 Quartz 6 位 cron 表达式，任务函数放在 `app/tasks/` 目录下。
+
+#### 编写任务函数
+
+在 `app/tasks/` 目录下创建 Python 模块，每个函数就是一个可调度的任务：
+
+```python
+# app/tasks/my_task.py
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def sync_data():
+    """同步数据（同步函数）。"""
+    logger.info("开始同步数据...")
+    # 你的业务逻辑
+    logger.info("同步完成")
+
+
+async def clean_expired_data(days: int = 30):
+    """清理过期数据（异步函数，支持参数）。"""
+    logger.info(f"清理 {days} 天前的过期数据...")
+    # 你的业务逻辑（可以使用 await）
+    logger.info("清理完成")
+
+
+def send_report(email: str, include_chart: bool = True):
+    """发送报表（多参数）。"""
+    logger.info(f"发送报表到 {email}, 包含图表: {include_chart}")
+```
+
+任务函数支持同步和异步两种写法，调度器会自动识别。
+
+#### 注册任务
+
+在前端 系统监控 → 定时任务 页面点击"新增"，填写：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 任务名称 | 任务描述 | 清理过期数据 |
+| 任务组名 | 分组（DEFAULT/SYSTEM） | DEFAULT |
+| 调用目标 | `模块名.函数名(参数)` | `my_task.clean_expired_data(90)` |
+| cron 表达式 | Quartz 6 位格式 | `0 0 2 * * ?` |
+| 执行策略 | 错过触发时的处理 | 放弃执行 |
+| 是否并发 | 同一任务是否允许并行 | 禁止 |
+
+#### 调用目标格式
+
+调用目标的格式为 `模块名.函数名(参数列表)`，系统自动从 `app/tasks/` 目录导入对应模块：
+
+```
+# 无参数
+my_task.sync_data
+
+# 单个参数
+my_task.clean_expired_data(90)
+
+# 多个参数（支持字符串、数字、布尔值）
+my_task.send_report('admin@example.com', true)
+```
+
+参数使用 `ast.literal_eval` 安全解析，支持 Python 字面量（字符串、数字、布尔值、None、列表、字典）。布尔值可以用 `true/false`（自动转换为 Python 的 `True/False`）。
+
+#### cron 表达式
+
+使用 Quartz 6 位格式：`秒 分 时 日 月 周`
+
+| 表达式 | 含义 |
+|--------|------|
+| `0 0 2 * * ?` | 每天凌晨 2:00 |
+| `0 */5 * * * ?` | 每 5 分钟 |
+| `0 0 9 ? * MON-FRI` | 工作日早上 9:00 |
+| `0/10 * * * * ?` | 每 10 秒 |
+| `0 0 12 1 * ?` | 每月 1 号中午 12:00 |
+
+`?` 表示不指定（日和周互斥时使用），系统会自动转换为 APScheduler 兼容格式。
+
+#### 任务管理
+
+- **启停切换**：点击状态列开关，暂停后任务不再触发，恢复后按 cron 继续调度
+- **立即执行**：操作列"更多" → "执行一次"，立即触发一次，不影响定时调度
+- **调度日志**：点击工具栏"日志"按钮，查看每次执行的结果、耗时和异常信息
+- **并发控制**：设为"禁止"时，上一次执行未完成则跳过本次触发
 
 ---
 
@@ -714,26 +711,6 @@ FastAPI 按注册顺序匹配路由。如果有 `/{id}` 这样的路径参数路
 @router.get("/list")          # 永远不会被匹配到
 ```
 
-### 添加定时任务
-
-1. 在 `app/tasks/` 目录下创建模块文件：
-
-```python
-# app/tasks/my_task.py
-import logging
-
-logger = logging.getLogger(__name__)
-
-async def clean_expired_data():
-    """清理过期数据。"""
-    logger.info("开始清理过期数据...")
-    # 你的业务逻辑
-    logger.info("清理完成")
-```
-
-2. 在前端"定时任务"页面新增任务，调用目标填写：`my_task.clean_expired_data`
-3. 填写 cron 表达式（6 位 Quartz 格式），如 `0 0 2 * * ?` 表示每天凌晨 2 点执行
-
 ### 添加字典数据
 
 1. 在前端"字典管理"中新增字典类型（如 `biz_product_status`）
@@ -793,28 +770,28 @@ FastMVP/
 
 ## 已测试页面
 
-以下页面已通过完整的 CRUD 功能测试（含新增、编辑、删除、查询等操作）：
+以下页面已通过完整的功能测试，每个模块均验证了所有可用操作：
 
-| 模块 | 页面 | 状态 |
-|------|------|------|
-| 系统管理 | 用户管理 | 通过 |
-| 系统管理 | 角色管理 | 通过 |
-| 系统管理 | 菜单管理 | 通过 |
-| 系统管理 | 部门管理 | 通过 |
-| 系统管理 | 岗位管理 | 通过 |
-| 系统管理 | 字典管理 | 通过 |
-| 系统管理 | 参数设置 | 通过 |
-| 系统管理 | 通知公告 | 通过 |
-| 系统监控 | 操作日志 | 通过 |
-| 系统监控 | 登录日志 | 通过 |
-| 系统监控 | 在线用户 | 通过 |
-| 系统监控 | 服务监控 | 通过 |
-| 系统监控 | 缓存监控 | 通过 |
-| 系统监控 | 缓存列表 | 通过 |
-| 系统监控 | 定时任务 | 通过 |
-| 系统监控 | 调度日志 | 通过 |
-| 系统监控 | 数据监控 | 通过 |
-| 系统工具 | 代码生成 | 通过 |
+| 模块 | 页面 | 测试项 | 状态 |
+|------|------|--------|------|
+| 系统管理 | 用户管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 角色管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 菜单管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 部门管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 岗位管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 字典管理 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 参数设置 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 通知公告 | 查询 / 新增 / 编辑 / 删除 | ✅ 通过 |
+| 系统管理 | 操作日志 | 查询 / 详细 / 删除 / 清空 | ✅ 通过 |
+| 系统管理 | 登录日志 | 查询 / 删除 / 清空 | ✅ 通过 |
+| 系统监控 | 在线用户 | 查询 | ✅ 通过 |
+| 系统监控 | 定时任务 | 查询 / 新增 / 编辑 / 删除 / 启停 / 执行一次 | ✅ 通过 |
+| 系统监控 | 调度日志 | 查询 / 删除 / 清空 | ✅ 通过 |
+| 系统监控 | 数据监控 | 查看连接池状态 | ✅ 通过 |
+| 系统监控 | 服务监控 | 查看 CPU/内存/磁盘 | ✅ 通过 |
+| 系统监控 | 缓存监控 | 查看 Redis 信息/命令统计/内存 | ✅ 通过 |
+| 系统监控 | 缓存列表 | 查看缓存分类 / 键名列表 / 缓存内容 | ✅ 通过 |
+| 系统工具 | 代码生成 | 查询 / 导入表 / 预览代码 / 删除 | ✅ 通过 |
 
 ## 开发过程中修复的问题
 
@@ -827,6 +804,8 @@ FastMVP/
 | 6 | 编辑代码生成表时字段信息为空 | `api/tool/gen.py` | 同 #3，响应数据未嵌套在 `data` 字段内 |
 | 7 | 生成代码请求被 `/{table_id}` 路由捕获 | `api/tool/gen.py` | 缺少 `/batchGenCode`、`/synchDb` 等端点，且路由顺序不当 |
 | 8 | Token 过期后白屏，无法跳转登录页 | `core/exception_handlers.py`, `api/auth/login.py` | AuthException 返回 HTTP 401 而非 HTTP 200 + `code:401`；`/logout` 端点要求有效 token 导致登出死循环 |
+| 9 | 操作日志/登录日志清空返回 500 | `api/monitor/operlog.py`, `api/monitor/logininfor.py` | `/clean` 路由定义在 `/{ids}` 之后，"clean" 被当作路径参数解析导致 `int("clean")` 失败 |
+| 10 | 操作日志清空请求超时 | `api/monitor/operlog.py` | `@log_operation` 装饰器在独立 session 中 INSERT 日志，而主 session 的 DELETE 未提交持有表锁，形成死锁。移除清空端点的 `@log_operation` 装饰器解决 |
 
 ## 前端修改说明
 

@@ -66,6 +66,17 @@ async def export_logininfor(
     )
 
 
+@router.delete("/clean")
+@log_operation("登录日志", BusinessType.CLEAN)
+async def clean_logininfor(
+    request: Request,
+    current_user: dict = Depends(has_permi("monitor:logininfor:remove")),
+    db: AsyncSession = Depends(get_db),
+):
+    await crud_logininfor.clean(db)
+    return AjaxResult.success()
+
+
 @router.delete("/{info_ids}")
 @log_operation("登录日志", BusinessType.DELETE)
 async def delete_logininfor(
@@ -76,17 +87,6 @@ async def delete_logininfor(
 ):
     ids = [int(i) for i in info_ids.split(",") if i.strip()]
     await crud_logininfor.delete_by_ids(db, ids)
-    return AjaxResult.success()
-
-
-@router.delete("/clean")
-@log_operation("登录日志", BusinessType.CLEAN)
-async def clean_logininfor(
-    request: Request,
-    current_user: dict = Depends(has_permi("monitor:logininfor:remove")),
-    db: AsyncSession = Depends(get_db),
-):
-    await crud_logininfor.clean(db)
     return AjaxResult.success()
 
 

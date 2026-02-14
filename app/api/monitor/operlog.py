@@ -74,6 +74,15 @@ async def export_oper_logs(
     )
 
 
+@router.delete("/clean")
+async def clean_oper_logs(
+    current_user: dict = Depends(has_permi("monitor:operlog:remove")),
+    db: AsyncSession = Depends(get_db),
+):
+    await crud_oper_log.clean(db)
+    return AjaxResult.success()
+
+
 @router.delete("/{oper_ids}")
 @log_operation("操作日志", BusinessType.DELETE)
 async def delete_oper_logs(
@@ -84,15 +93,4 @@ async def delete_oper_logs(
 ):
     ids = [int(i) for i in oper_ids.split(",") if i.strip()]
     await crud_oper_log.delete_by_ids(db, ids)
-    return AjaxResult.success()
-
-
-@router.delete("/clean")
-@log_operation("操作日志", BusinessType.CLEAN)
-async def clean_oper_logs(
-    request: Request,
-    current_user: dict = Depends(has_permi("monitor:operlog:remove")),
-    db: AsyncSession = Depends(get_db),
-):
-    await crud_oper_log.clean(db)
     return AjaxResult.success()
