@@ -8,6 +8,7 @@ from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.middleware import setup_middleware
 from app.core.redis import close_redis, init_redis
+from app.services.job_service import init_scheduler, shutdown_scheduler
 from app.api.router import api_router
 
 
@@ -16,8 +17,10 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     # Startup
     await init_redis()
+    await init_scheduler(app)
     yield
     # Shutdown
+    await shutdown_scheduler()
     await close_redis()
 
 
@@ -45,6 +48,9 @@ app = FastAPI(
         {"name": "在线用户", "description": "在线用户查询、强退"},
         {"name": "服务监控", "description": "服务器 CPU/内存/磁盘监控"},
         {"name": "缓存监控", "description": "Redis 缓存信息、键值管理"},
+        {"name": "定时任务", "description": "定时任务的增删改查、状态切换、立即执行"},
+        {"name": "调度日志", "description": "调度日志查询、删除、清空"},
+        {"name": "数据监控", "description": "数据库连接池监控"},
         {"name": "代码生成", "description": "数据库表导入、代码预览、生成下载"},
     ],
 )

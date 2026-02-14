@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.auth import login, info
 from app.api.common import router as common_router
 from app.api.system import user, role, menu, dept, post, dict_type, dict_data, config, notice
-from app.api.monitor import operlog, logininfor, online, server, cache
+from app.api.monitor import operlog, logininfor, online, server, cache, job, job_log, druid
 from app.api.tool import gen
 
 api_router = APIRouter()
@@ -32,6 +32,9 @@ api_router.include_router(logininfor.router, prefix="/monitor/logininfor", tags=
 api_router.include_router(online.router, prefix="/monitor/online", tags=["在线用户"])
 api_router.include_router(server.router, prefix="/monitor/server", tags=["服务监控"])
 api_router.include_router(cache.router, prefix="/monitor/cache", tags=["缓存监控"])
+api_router.include_router(job.router, prefix="/monitor/job", tags=["定时任务"])
+api_router.include_router(job_log.router, prefix="/monitor/jobLog", tags=["调度日志"])
+api_router.include_router(druid.router, prefix="/druid", tags=["数据监控"])
 
 # System Tools routes
 api_router.include_router(gen.router, prefix="/tool/gen", tags=["代码生成"])
