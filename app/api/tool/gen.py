@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi.responses import StreamingResponse
+import io
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import has_permi
@@ -89,6 +91,48 @@ async def list_db_tables(
     return TableDataInfo(total=total, rows=items).model_dump()
 
 
+@router.get("/batchGenCode")
+async def batch_gen_code(
+    tables: str = Query(""),
+    current_user: dict = Depends(has_permi("tool:gen:code")),
+    db: AsyncSession = Depends(get_db),
+):
+    table_names = [t.strip() for t in tables.split(",") if t.strip()]
+    if not table_names:
+        return AjaxResult.error(msg="请选择要生成的表")
+    zip_bytes = await codegen_service.generate_code_zip(db, table_names)
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=ruoyi.zip"},
+    )
+
+
+@router.get("/genCode/{table_name}")
+async def gen_code(
+    table_name: str,
+    current_user: dict = Depends(has_permi("tool:gen:code")),
+    db: AsyncSession = Depends(get_db),
+):
+    zip_bytes = await codegen_service.generate_code_zip(db, [table_name])
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={table_name}.zip"},
+    )
+
+
+@router.get("/synchDb/{table_name}")
+async def synch_db(
+    table_name: str,
+    current_user: dict = Depends(has_permi("tool:gen:edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    await codegen_service.synch_db(db, table_name)
+    await db.commit()
+    return AjaxResult.success()
+
+
 @router.get("/{table_id}")
 async def get_gen_table(
     table_id: int,
@@ -98,10 +142,10 @@ async def get_gen_table(
     table, columns = await codegen_service.get_table_with_columns(db, table_id)
     if not table:
         return AjaxResult.error(msg="表不存在")
-    return AjaxResult.success(
-        info=_table_to_dict(table),
-        rows=[_column_to_dict(c) for c in columns],
-    )
+    return AjaxResult.success(data={
+        "info": _table_to_dict(table),
+        "rows": [_column_to_dict(c) for c in columns],
+    })
 
 
 @router.get("/preview/{table_id}")

@@ -1,3 +1,4 @@
+import os
 import re
 from datetime import datetime
 from typing import Sequence
@@ -297,3 +298,122 @@ async def preview_code(db: AsyncSession, table_id: int) -> dict[str, str]:
             result[f"vm/python/{base_name}.python.vm"] = f"# Template '{tpl_name}' not found or error"
 
     return result
+
+
+async def synch_db(db: AsyncSession, table_name: str):
+    """Re-sync column info from database for an existing gen_table."""
+    # Find the gen_table
+    result = await db.execute(
+        select(GenTable).where(GenTable.table_name == table_name)
+    )
+    table = result.scalar_one_or_none()
+    if not table:
+        return
+
+    # Get current columns from database
+    col_result = await db.execute(text(
+        "SELECT column_name, column_comment, column_type, column_key, extra, is_nullable "
+        "FROM information_schema.columns "
+        "WHERE table_schema = DATABASE() AND table_name = :tn "
+        "ORDER BY ordinal_position"
+    ), {"tn": table_name})
+    db_columns = col_result.fetchall()
+
+    # Get existing gen_table_column records
+    existing_result = await db.execute(
+        select(GenTableColumn).where(GenTableColumn.table_id == table.table_id)
+    )
+    existing_cols = {c.column_name: c for c in existing_result.scalars().all()}
+
+    for idx, col in enumerate(db_columns):
+        col_name, col_comment, col_type, col_key, extra, nullable = col
+        if col_name in existing_cols:
+            # Update existing
+            ec = existing_cols[col_name]
+            ec.column_comment = col_comment or ""
+            ec.column_type = col_type
+            ec.python_type = _get_python_type(col_type)
+            ec.is_pk = "1" if col_key == "PRI" else "0"
+            ec.sort = idx
+            del existing_cols[col_name]
+        else:
+            # New column
+            is_pk = "1" if col_key == "PRI" else "0"
+            gen_col = GenTableColumn(
+                table_id=table.table_id,
+                column_name=col_name,
+                column_comment=col_comment or "",
+                column_type=col_type,
+                python_type=_get_python_type(col_type),
+                python_field=_to_snake_field(col_name),
+                is_pk=is_pk,
+                is_increment="1" if extra and "auto_increment" in extra else "0",
+                is_required="0" if nullable == "YES" or is_pk == "1" else "1",
+                is_insert="1" if is_pk == "0" else "0",
+                is_edit="1" if is_pk == "0" else "0",
+                is_list="1",
+                is_query="0",
+                query_type="EQ",
+                html_type=_guess_html_type(col_name, col_type),
+                sort=idx,
+                create_by="admin",
+            )
+            db.add(gen_col)
+
+    # Delete columns that no longer exist in database
+    for old_col in existing_cols.values():
+        await db.delete(old_col)
+
+    await db.flush()
+
+
+async def generate_code_zip(db: AsyncSession, table_names: list[str]) -> bytes:
+    """Generate code for tables and return as zip bytes."""
+    import io
+    import zipfile
+    from jinja2 import Environment, FileSystemLoader
+
+    template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
+    env = Environment(loader=FileSystemLoader(template_dir), autoescape=False)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for tname in table_names:
+            result = await db.execute(
+                select(GenTable).where(GenTable.table_name == tname)
+            )
+            table = result.scalar_one_or_none()
+            if not table:
+                continue
+
+            col_result = await db.execute(
+                select(GenTableColumn)
+                .where(GenTableColumn.table_id == table.table_id)
+                .order_by(GenTableColumn.sort)
+            )
+            columns = col_result.scalars().all()
+
+            pk_column = next((c for c in columns if c.is_pk == "1"), columns[0] if columns else None)
+            context = {
+                "table": table,
+                "columns": columns,
+                "pk_column": pk_column,
+                "class_name": table.class_name,
+                "module_name": table.module_name,
+                "business_name": table.business_name,
+                "function_name": table.function_name,
+                "author": table.function_author,
+                "table_name": table.table_name,
+                "datetime": datetime.now().strftime("%Y-%m-%d"),
+            }
+
+            for tpl_name in ("model.py.j2", "schema.py.j2", "crud.py.j2", "api.py.j2"):
+                try:
+                    tpl = env.get_template(tpl_name)
+                    code = tpl.render(**context)
+                    file_name = tpl_name.replace(".j2", "")
+                    zf.writestr(f"{tname}/{file_name}", code)
+                except Exception:
+                    pass
+
+    return buf.getvalue()

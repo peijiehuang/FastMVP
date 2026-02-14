@@ -65,11 +65,17 @@ async def login(
 @router.post("/logout")
 async def logout(
     request: Request,
-    current_user: dict = Depends(get_current_user),
     redis: aioredis.Redis = Depends(get_redis),
 ):
-    """User logout."""
-    token_key = current_user.get("token_key", "")
-    if token_key:
-        await auth_service.logout(token_key, redis)
+    """User logout. Does not require a valid token — gracefully handles expired sessions."""
+    from app.core.deps import http_bearer
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            user_key = parse_token(token)
+            if user_key:
+                await auth_service.logout(user_key, redis)
+    except Exception:
+        pass
     return AjaxResult.success(msg="退出成功")

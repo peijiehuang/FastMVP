@@ -18,7 +18,7 @@ def register_exception_handlers(app: FastAPI):
     @app.exception_handler(AuthException)
     async def auth_exception_handler(request: Request, exc: AuthException):
         return JSONResponse(
-            status_code=401,
+            status_code=200,
             content={"code": 401, "msg": exc.message},
         )
 
